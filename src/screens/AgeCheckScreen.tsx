@@ -1,32 +1,91 @@
-import { useState } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { useState, useRef, useEffect } from "react";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/AppNavigator";
-import { verifyAge } from "../services/mockBackend";
+import {
+  openWalletForVerification,
+  pollVPStatus,
+  getVPResult,
+} from "../services/verifyService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AgeCheck">;
 
 export default function AgeCheckScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const sessionRef = useRef<{ requestId: string; transactionId: string } | null>(null);
+  const pollingRef = useRef(false);
+
+  async function startPolling(requestId: string, transactionId: string) {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    setStatus("Aguardando resposta do wallet…");
+
+    try {
+      while (pollingRef.current) {
+        const vpStatus = await pollVPStatus(requestId);
+
+        if (vpStatus === "VP_SUBMITTED") {
+          setStatus("Verificando credencial…");
+          const result = await getVPResult(transactionId);
+          pollingRef.current = false;
+
+          if (result.verified) {
+            navigation.replace("Success", { requestId });
+          } else {
+            setError("Credencial inválida. Verificação de idade falhou.");
+            setLoading(false);
+            setStatus(null);
+          }
+          return;
+        }
+
+        if (vpStatus === "EXPIRED") {
+          pollingRef.current = false;
+          setError("Sessão expirada. Tente novamente.");
+          setLoading(false);
+          setStatus(null);
+          return;
+        }
+
+        // status === "ACTIVE" — continue polling (long-polling, server holds connection)
+      }
+    } catch {
+      pollingRef.current = false;
+      setError("Erro ao verificar status. Tente novamente.");
+      setLoading(false);
+      setStatus(null);
+    }
+  }
+
+  // When app comes back to foreground, resume polling
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && sessionRef.current && !pollingRef.current) {
+        startPolling(sessionRef.current.requestId, sessionRef.current.transactionId);
+      }
+    });
+    return () => {
+      subscription.remove();
+      pollingRef.current = false;
+    };
+  }, []);
 
   async function handleVerify() {
     setLoading(true);
     setError(null);
+    setStatus("Abrindo wallet…");
 
     try {
-      const result = await verifyAge();
-
-      if (result.ok) {
-        navigation.replace("Success", { requestId: result.requestId });
-      } else {
-        setError("Não foi possível verificar sua idade. Tente novamente.");
-      }
-    } catch {
-      setError("Erro de conexão. Tente novamente.");
-    } finally {
+      const { transactionId, requestId } = await openWalletForVerification();
+      sessionRef.current = { requestId, transactionId };
+      startPolling(requestId, transactionId);
+    } catch (e: any) {
+      setError(e.message || "Erro ao conectar com o wallet.");
       setLoading(false);
+      setStatus(null);
     }
   }
 
@@ -44,8 +103,12 @@ export default function AgeCheckScreen({ navigation }: Props) {
         </Text>
 
         <Text style={styles.note}>
-          A verificação é feita no backend (mock).
+          A verificação é feita via credencial digital (Inji Wallet).
         </Text>
+
+        {status && (
+          <Text style={styles.statusText}>{status}</Text>
+        )}
 
         {error && (
           <View style={styles.errorBox}>
@@ -72,7 +135,7 @@ export default function AgeCheckScreen({ navigation }: Props) {
           )}
         </Pressable>
 
-        <Pressable onPress={() => navigation.goBack()} style={styles.backLink}>
+        <Pressable onPress={() => { pollingRef.current = false; navigation.goBack(); }} style={styles.backLink}>
           <Text style={styles.backText}>← Voltar</Text>
         </Pressable>
       </View>
@@ -121,6 +184,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     fontStyle: "italic",
+  },
+  statusText: {
+    fontSize: 14,
+    color: "#FF5A1F",
+    textAlign: "center",
+    marginTop: 16,
+    fontWeight: "600",
   },
   errorBox: {
     marginTop: 20,
