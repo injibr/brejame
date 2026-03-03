@@ -15,13 +15,22 @@
     "ios": {
       "supportsTablet": true
     },
+    "scheme": "brejame",
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.netlonde.brejametmp",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [{ "scheme": "brejame" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
