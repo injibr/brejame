@@ -29,9 +29,8 @@ export function useAgeVerification() {
         }
       });
 
-      await Linking.openURL(
-        `injiwalletrefreact://carteira?origin=brejame%3A%2F%2F&requestId=${requestId}&nonce=${nonce}`
-      );
+      const walletUrl = `openid4vp:///authorize?origin=brejame%3A%2F%2F&requestId=${requestId}&nonce=${nonce}`;
+      await Linking.openURL(walletUrl);
 
       const result = await pollAndFetchResult(requestId, transactionId);
       removeListener();

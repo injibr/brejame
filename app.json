@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "brejame-tmp",
-    "slug": "brejame-tmp",
+    "name": "brejame",
+    "slug": "brejame",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,22 +13,31 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.netlonde.brejame"
     },
     "scheme": "brejame",
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/brejame-logo.png",
+        "backgroundColor": "#ffffff",
+        "monochromeImage": "./assets/brejame-logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.netlonde.brejametmp",
+      "package": "com.netlonde.brejame",
       "intentFilters": [
         {
           "action": "VIEW",
-          "data": [{ "scheme": "brejame" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "brejame"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
