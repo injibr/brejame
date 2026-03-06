@@ -19,9 +19,8 @@
     "scheme": "brejame",
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/brejame-logo.png",
-        "backgroundColor": "#ffffff",
-        "monochromeImage": "./assets/brejame-logo.png"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
