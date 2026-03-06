@@ -1,23 +1,91 @@
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { useState, useRef, useEffect } from "react";
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/AppNavigator";
-import { useAgeVerification } from "../hooks/useAgeVerification";
-import { LoadingOverlay } from "../components/LoadingOverlay";
+import {
+  openWalletForVerification,
+  pollVPStatus,
+  getVPResult,
+} from "../services/verifyService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AgeCheck">;
 
 export default function AgeCheckScreen({ navigation }: Props) {
-  const { verify, waiting } = useAgeVerification();
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const sessionRef = useRef<{ requestId: string; transactionId: string } | null>(null);
+  const pollingRef = useRef(false);
 
-  const handleVerificar = async () => {
-    const result = await verify();
-    if (!result) return;
+  async function startPolling(requestId: string, transactionId: string) {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    setStatus("Aguardando resposta do wallet…");
 
-    if ('underage' in result) {
-      navigation.replace("Underage");
-    } else {
-      navigation.replace("Success", { requestId: result.requestId, isOver18: true });
+    try {
+      while (pollingRef.current) {
+        const vpStatus = await pollVPStatus(requestId);
+
+        if (vpStatus === "VP_SUBMITTED") {
+          setStatus("Verificando credencial…");
+          const result = await getVPResult(transactionId);
+          pollingRef.current = false;
+
+          if (result.verified) {
+            navigation.replace("Success", { requestId });
+          } else {
+            setError("Credencial inválida. Verificação de idade falhou.");
+            setLoading(false);
+            setStatus(null);
+          }
+          return;
+        }
+
+        if (vpStatus === "EXPIRED") {
+          pollingRef.current = false;
+          setError("Sessão expirada. Tente novamente.");
+          setLoading(false);
+          setStatus(null);
+          return;
+        }
+
+        // status === "ACTIVE" — continue polling (long-polling, server holds connection)
+      }
+    } catch {
+      pollingRef.current = false;
+      setError("Erro ao verificar status. Tente novamente.");
+      setLoading(false);
+      setStatus(null);
+    }
+  }
+
+  // When app comes back to foreground, resume polling
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && sessionRef.current && !pollingRef.current) {
+        startPolling(sessionRef.current.requestId, sessionRef.current.transactionId);
+      }
+    });
+    return () => {
+      subscription.remove();
+      pollingRef.current = false;
+    };
+  }, []);
+
+  async function handleVerify() {
+    setLoading(true);
+    setError(null);
+    setStatus("Abrindo wallet…");
+
+    try {
+      const { transactionId, requestId } = await openWalletForVerification();
+      sessionRef.current = { requestId, transactionId };
+      startPolling(requestId, transactionId);
+    } catch (e: any) {
+      setError(e.message || "Erro ao conectar com o wallet.");
+      setLoading(false);
+      setStatus(null);
     }
   };
 
@@ -31,15 +99,30 @@ export default function AgeCheckScreen({ navigation }: Props) {
         <Text style={styles.body}>
           Para comprar bebida alcoólica, você precisa ter 18 anos ou mais.
         </Text>
+
+        <Text style={styles.note}>
+          A verificação é feita via credencial digital (Inji Wallet).
+        </Text>
+
+        {status && (
+          <Text style={styles.statusText}>{status}</Text>
+        )}
+
+        {error && (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
         <Pressable
           style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-          onPress={handleVerificar}
-          disabled={waiting}
+          onPress={handleVerify}
+          disabled={loading}
         >
           <Text style={styles.buttonText}>Verificar Idade</Text>
         </Pressable>
-        <LoadingOverlay visible={waiting} />
-        <Pressable onPress={() => navigation.goBack()} style={styles.backLink}>
+
+        <Pressable onPress={() => { pollingRef.current = false; navigation.goBack(); }} style={styles.backLink}>
           <Text style={styles.backText}>← Voltar</Text>
         </Pressable>
       </View>
@@ -56,8 +139,53 @@ const styles = StyleSheet.create({
     shadowOpacity: 1, shadowRadius: 0, elevation: 8, marginBottom: 24,
   },
   icon: { fontSize: 48 },
-  title: { fontSize: 32, fontWeight: "900", color: "#1A1A1A", textAlign: "center" },
-  body: { fontSize: 18, color: "#333", textAlign: "center", marginTop: 20, lineHeight: 26, paddingHorizontal: 8 },
+  title: {
+    fontSize: 32,
+    fontWeight: "900",
+    color: "#1A1A1A",
+    textAlign: "center",
+  },
+  body: {
+    fontSize: 18,
+    color: "#333",
+    textAlign: "center",
+    marginTop: 20,
+    lineHeight: 26,
+    paddingHorizontal: 8,
+  },
+  note: {
+    fontSize: 13,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 12,
+    fontStyle: "italic",
+  },
+  statusText: {
+    fontSize: 14,
+    color: "#FF5A1F",
+    textAlign: "center",
+    marginTop: 16,
+    fontWeight: "600",
+  },
+  errorBox: {
+    marginTop: 20,
+    backgroundColor: "#DC2626",
+    borderWidth: 3,
+    borderColor: "#000",
+    padding: 12,
+    width: "100%",
+    shadowColor: "#000",
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+  errorText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   button: {
     marginTop: 40, backgroundColor: "#FF5A1F", paddingVertical: 18, paddingHorizontal: 48,
     borderWidth: 3, borderColor: "#000", shadowColor: "#000",
