@@ -1,38 +1,20 @@
 import { Linking } from "react-native";
 
-const VERIFY_SERVICE_URL = "https://verify.breja.me/v1/verify";
-const CLIENT_ID = "did:web:verify.breja.me:v1:verify";
+const BASE_URL = "https://verify.breja.me";
+const CLIENT_ID = "brejame://";
 
-// Presentation definition for ECACredential age verification (over 18)
-const AGE_PRESENTATION_DEFINITION = {
-  id: "age-verification",
-  name: "Age Verification",
-  purpose: "Verify that the user is 18 years or older",
+const PRESENTATION_DEFINITION = {
+  id: "eca-age-check",
   input_descriptors: [
     {
-      id: "eca_age_over_18",
-      name: "ECA Age Credential",
-      purpose: "Prove you are 18+",
-      format: {
-        ldp_vp: {
-          proof_type: ["Ed25519Signature2020"],
-        },
-      },
+      id: "ECACredential",
+      name: "Comprovante de Maioridade",
+      purpose: "Verificar que o usuário é maior de 18 anos",
       constraints: {
         fields: [
           {
             path: ["$.type"],
-            filter: {
-              type: "array",
-              contains: { const: "ECACredential" },
-            },
-          },
-          {
-            path: ["$.credentialSubject.isOver18"],
-            filter: {
-              type: "boolean",
-              const: true,
-            },
+            filter: { type: "string", pattern: "ECACredential" },
           },
         ],
       },
@@ -43,10 +25,6 @@ const AGE_PRESENTATION_DEFINITION = {
 const VP_FORMAT = {
   ldp_vp: {
     proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"],
-  },
-  "vc+sd-jwt": {
-    "sd-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
-    "kb-jwt_alg_values": ["RS256", "ES256", "ES256K", "EdDSA"],
   },
 };
 
@@ -70,36 +48,14 @@ type QrData = {
 };
 
 function buildDeepLinkUrl(data: QrData): string {
-  const params = new URLSearchParams();
-  params.set("client_id", CLIENT_ID);
-
-  if (data.requestUri) {
-    params.set("request_uri", data.requestUri);
-  } else if (data.authorizationDetails) {
-    const auth = data.authorizationDetails;
-    params.set("state", data.requestId);
-    params.set("response_mode", auth.responseMode);
-    params.set("response_type", auth.responseType);
-    params.set("nonce", auth.nonce);
-    params.set("response_uri", auth.responseUri);
-
-    if (auth.presentationDefinitionUri) {
-      params.set(
-        "presentation_definition_uri",
-        VERIFY_SERVICE_URL + auth.presentationDefinitionUri
-      );
-    } else if (auth.presentationDefinition) {
-      params.set(
-        "presentation_definition",
-        JSON.stringify(auth.presentationDefinition)
-      );
-    }
-
-    params.set(
-      "client_metadata",
-      JSON.stringify({ client_name: CLIENT_ID, vp_formats: VP_FORMAT })
-    );
+  if (!data.authorizationDetails) {
+    throw new Error("Missing authorization details");
   }
+
+  const params = new URLSearchParams();
+  params.set("origin", CLIENT_ID);
+  params.set("requestId", data.requestId);
+  params.set("nonce", data.authorizationDetails.nonce);
 
   return `openid4vp://authorize?${params.toString()}`;
 }
@@ -109,17 +65,16 @@ export async function createVPRequest(): Promise<{
   requestId: string;
   deepLinkUrl: string;
 }> {
-  const response = await fetch(`${VERIFY_SERVICE_URL}/vp-request`, {
+  const response = await fetch(`${BASE_URL}/v1/verify/vp-request`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       clientId: CLIENT_ID,
-      nonce: generateNonce(),
-      presentationDefinition: AGE_PRESENTATION_DEFINITION,
+      presentationDefinition: PRESENTATION_DEFINITION,
     }),
   });
 
-  if (response.status !== 201) {
+  if (!response.ok) {
     throw new Error("Failed to create VP request");
   }
 
@@ -137,9 +92,9 @@ export async function pollVPStatus(
   requestId: string
 ): Promise<"ACTIVE" | "VP_SUBMITTED" | "EXPIRED"> {
   const response = await fetch(
-    `${VERIFY_SERVICE_URL}/vp-request/${requestId}/status`
+    `${BASE_URL}/v1/verify/vp-request/${requestId}/status`
   );
-  if (response.status !== 200) {
+  if (!response.ok) {
     throw new Error("Failed to fetch VP status");
   }
   const data = await response.json();
@@ -150,17 +105,29 @@ export async function getVPResult(
   transactionId: string
 ): Promise<{ verified: boolean }> {
   const response = await fetch(
-    `${VERIFY_SERVICE_URL}/vp-result/${transactionId}`
+    `${BASE_URL}/v1/verify/vp-result/${transactionId}`
   );
-  const data = await response.json();
-  if (response.status !== 200) {
-    throw new Error(data.errorMessage || "Failed to get VP result");
+  
+  const rawText = await response.text();
+  
+  if (!response.ok) {
+    throw new Error("Failed to get VP result");
   }
-
-  const allValid = data.vcResults.every(
-    (r: { verificationStatus: string }) => r.verificationStatus === "SUCCESS"
-  );
-  return { verified: allValid };
+  
+  const data = JSON.parse(rawText);
+  
+  if (data.vpResultStatus !== "SUCCESS") {
+    return { verified: false };
+  }
+  
+  if (!data.vcResults || data.vcResults.length === 0) {
+    return { verified: false };
+  }
+  
+  const vc = JSON.parse(data.vcResults[0].vc);
+  const isOver18 = vc.credential.credentialSubject.isOver18 === true;
+  
+  return { verified: isOver18 };
 }
 
 export async function openWalletForVerification(): Promise<{
@@ -168,12 +135,12 @@ export async function openWalletForVerification(): Promise<{
   requestId: string;
 }> {
   const { transactionId, requestId, deepLinkUrl } = await createVPRequest();
-
-  const canOpen = await Linking.canOpenURL(deepLinkUrl);
-  if (!canOpen) {
+  
+  try {
+    await Linking.openURL(deepLinkUrl);
+  } catch (error) {
     throw new Error("Nenhum wallet compatível encontrado. Instale o Inji Wallet.");
   }
 
-  await Linking.openURL(deepLinkUrl);
   return { transactionId, requestId };
 }

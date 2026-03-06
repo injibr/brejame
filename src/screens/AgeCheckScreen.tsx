@@ -87,7 +87,7 @@ export default function AgeCheckScreen({ navigation }: Props) {
       setLoading(false);
       setStatus(null);
     }
-  }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -95,9 +95,7 @@ export default function AgeCheckScreen({ navigation }: Props) {
         <View style={styles.iconBox}>
           <Text style={styles.icon}>🍺</Text>
         </View>
-
         <Text style={styles.title}>Verificação de idade</Text>
-
         <Text style={styles.body}>
           Para comprar bebida alcoólica, você precisa ter 18 anos ou mais.
         </Text>
@@ -117,22 +115,11 @@ export default function AgeCheckScreen({ navigation }: Props) {
         )}
 
         <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            pressed && !loading && styles.buttonPressed,
-            loading && styles.buttonDisabled,
-          ]}
+          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
           onPress={handleVerify}
           disabled={loading}
         >
-          {loading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color="#FFF" size="small" />
-              <Text style={styles.buttonText}> Verificando…</Text>
-            </View>
-          ) : (
-            <Text style={styles.buttonText}>Verificar Idade</Text>
-          )}
+          <Text style={styles.buttonText}>Verificar Idade</Text>
         </Pressable>
 
         <Pressable onPress={() => { pollingRef.current = false; navigation.goBack(); }} style={styles.backLink}>
@@ -145,23 +132,11 @@ export default function AgeCheckScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#F5F5F0" },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 48,
-    alignItems: "center",
-  },
+  container: { flex: 1, paddingHorizontal: 24, paddingTop: 48, alignItems: "center" },
   iconBox: {
-    borderWidth: 3,
-    borderColor: "#000",
-    padding: 16,
-    backgroundColor: "#FFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
-    marginBottom: 24,
+    borderWidth: 3, borderColor: "#000", padding: 16, backgroundColor: "#FFF",
+    shadowColor: "#000", shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1, shadowRadius: 0, elevation: 8, marginBottom: 24,
   },
   icon: { fontSize: 48 },
   title: {
@@ -212,39 +187,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   button: {
-    marginTop: 40,
-    backgroundColor: "#FF5A1F",
-    paddingVertical: 18,
-    paddingHorizontal: 48,
-    borderWidth: 3,
-    borderColor: "#000",
-    shadowColor: "#000",
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
+    marginTop: 40, backgroundColor: "#FF5A1F", paddingVertical: 18, paddingHorizontal: 48,
+    borderWidth: 3, borderColor: "#000", shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 8,
   },
-  buttonPressed: {
-    shadowOffset: { width: 1, height: 1 },
-    transform: [{ translateX: 3 }, { translateY: 3 }],
-  },
-  buttonDisabled: {
-    backgroundColor: "#CC4816",
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  buttonText: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#FFF",
-    letterSpacing: 1,
-  },
+  buttonPressed: { shadowOffset: { width: 1, height: 1 }, transform: [{ translateX: 3 }, { translateY: 3 }] },
+  buttonText: { fontSize: 22, fontWeight: "900", color: "#FFF", letterSpacing: 1 },
   backLink: { marginTop: 24, padding: 8 },
-  backText: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "600",
-  },
+  backText: { fontSize: 16, color: "#666", fontWeight: "600" },
 });
