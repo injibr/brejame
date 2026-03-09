@@ -34,10 +34,8 @@ export default function AgeCheckScreen({ navigation }: Props) {
 
           if (result.verified) {
             navigation.replace("Success", { requestId });
-          } else {
-            setError("Credencial inválida. Verificação de idade falhou.");
-            setLoading(false);
-            setStatus(null);
+          } else if (result.underage) {
+            navigation.replace("Underage");
           }
           return;
         }
@@ -50,9 +48,9 @@ export default function AgeCheckScreen({ navigation }: Props) {
           return;
         }
 
-        // status === "ACTIVE" — continue polling (long-polling, server holds connection)
+        // status === "ACTIVE" — continue polling
       }
-    } catch {
+    } catch (err) {
       pollingRef.current = false;
       setError("Erro ao verificar status. Tente novamente.");
       setLoading(false);

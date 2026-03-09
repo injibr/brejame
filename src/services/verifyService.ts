@@ -103,31 +103,27 @@ export async function pollVPStatus(
 
 export async function getVPResult(
   transactionId: string
-): Promise<{ verified: boolean }> {
+): Promise<{ verified: boolean; underage?: boolean }> {
   const response = await fetch(
     `${BASE_URL}/v1/verify/vp-result/${transactionId}`
   );
-  
+
   const rawText = await response.text();
-  
+
   if (!response.ok) {
     throw new Error("Failed to get VP result");
   }
-  
+
   const data = JSON.parse(rawText);
-  
-  if (data.vpResultStatus !== "SUCCESS") {
-    return { verified: false };
+
+  if (data.vpResultStatus !== "SUCCESS" || !data.vcResults?.length) {
+    throw new Error("VP result unavailable");
   }
-  
-  if (!data.vcResults || data.vcResults.length === 0) {
-    return { verified: false };
-  }
-  
+
   const vc = JSON.parse(data.vcResults[0].vc);
   const isOver18 = vc.credential.credentialSubject.isOver18 === true;
-  
-  return { verified: isOver18 };
+
+  return { verified: isOver18, underage: !isOver18 };
 }
 
 export async function openWalletForVerification(): Promise<{
