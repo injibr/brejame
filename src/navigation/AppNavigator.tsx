@@ -7,7 +7,7 @@ import UnderageScreen from "../screens/UnderageScreen";
 export type RootStackParamList = {
   Storefront: undefined;
   AgeCheck: undefined;
-  Success: { requestId: string; isOver18: boolean };
+  Success: { requestId: string };
   Underage: undefined;
 };
 
