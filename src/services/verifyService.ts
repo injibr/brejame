@@ -140,3 +140,36 @@ export async function openWalletForVerification(): Promise<{
 
   return { transactionId, requestId };
 }
+function generateNonceForToken(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
+export async function requestOtpToken(): Promise<string> {
+  const nonce = generateNonceForToken();
+  const deepLink = `openid4vp://generate-token?nonce=${encodeURIComponent(nonce)}&callback=brejame`;
+
+  try {
+    await Linking.openURL(deepLink);
+  } catch {
+    throw new Error("Nenhum wallet compatível encontrado. Instale o Inji Wallet.");
+  }
+  return nonce;
+}
+
+export async function verifyOtpToken(
+  token: string
+): Promise<{ verified: boolean; underage?: boolean }> {
+  const response = await fetch(`${BASE_URL}/v1/verify/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha ao verificar token');
+  }
+
+  const data = await response.json();
+  const isOver18 = data.isOver18 === true;
+  return { verified: isOver18, underage: !isOver18 };
+}

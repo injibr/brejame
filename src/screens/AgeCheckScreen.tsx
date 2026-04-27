@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Linking from "expo-linking";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/AppNavigator";
 import {
@@ -58,15 +59,25 @@ export default function AgeCheckScreen({ navigation }: Props) {
     }
   }
 
-  // When app comes back to foreground, resume polling
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextState) => {
+    const appSub = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active" && sessionRef.current && !pollingRef.current) {
         startPolling(sessionRef.current.requestId, sessionRef.current.transactionId);
       }
     });
+
+    const linkSub = Linking.addEventListener("url", ({ url }) => {
+      if (Linking.parse(url).queryParams?.verified === "false") {
+        pollingRef.current = false;
+        setLoading(false);
+        setStatus(null);
+        setError("Compartilhamento recusado pelo usuário.");
+      }
+    });
+
     return () => {
-      subscription.remove();
+      appSub.remove();
+      linkSub.remove();
       pollingRef.current = false;
     };
   }, []);

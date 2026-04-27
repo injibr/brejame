@@ -1,12 +1,14 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import StorefrontScreen from "../screens/StorefrontScreen";
 import AgeCheckScreen from "../screens/AgeCheckScreen";
+import OtpCheckScreen from "../screens/OtpCheckScreen";
 import SuccessScreen from "../screens/SuccessScreen";
 import UnderageScreen from "../screens/UnderageScreen";
 
 export type RootStackParamList = {
   Storefront: undefined;
   AgeCheck: undefined;
+  OtpCheck: undefined;
   Success: { requestId: string };
   Underage: undefined;
 };
@@ -18,6 +20,7 @@ export default function AppNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Storefront" component={StorefrontScreen} />
       <Stack.Screen name="AgeCheck" component={AgeCheckScreen} />
+      <Stack.Screen name="OtpCheck" component={OtpCheckScreen} />
       <Stack.Screen name="Success" component={SuccessScreen} />
       <Stack.Screen name="Underage" component={UnderageScreen} />
     </Stack.Navigator>

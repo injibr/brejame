@@ -87,6 +87,13 @@ export default function StorefrontScreen({ navigation }: Props) {
         >
           <Text style={styles.buttonText}>COMPRAR</Text>
         </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.buttonSecondary, pressed && styles.buttonPressed]}
+          onPress={() => navigation.navigate("OtpCheck")}
+        >
+          <Text style={styles.buttonSecondaryText}>VERIFICAR VIA TOKEN</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -162,5 +169,24 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#FFF",
     letterSpacing: 3,
+  },
+  buttonSecondary: {
+    marginTop: 16,
+    backgroundColor: "#FFF",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderWidth: 3,
+    borderColor: "#FF5A1F",
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 8,
+  },
+  buttonSecondaryText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#FF5A1F",
+    letterSpacing: 2,
   },
 });
