@@ -1,20 +1,30 @@
 import { Linking } from "react-native";
 
 const BASE_URL = "https://verify.breja.me";
-const CLIENT_ID = "brejame://";
+const CLIENT_ID = "did:web:verify.breja.me:v1:verify";
+const ORIGIN = "brejame://";
 
 const PRESENTATION_DEFINITION = {
-  id: "eca-age-check",
+  id: "eca-age-verification",
+  purpose: "Verificação de idade conforme o Estatuto da Criança e do Adolescente",
+  format: {
+    ldp_vc: {
+      proof_type: ["Ed25519Signature2020"],
+    },
+  },
   input_descriptors: [
     {
-      id: "ECACredential",
-      name: "Comprovante de Maioridade",
-      purpose: "Verificar que o usuário é maior de 18 anos",
+      id: "eca credential",
+      format: {
+        ldp_vc: {
+          proof_type: ["Ed25519Signature2020"],
+        },
+      },
       constraints: {
         fields: [
           {
             path: ["$.type"],
-            filter: { type: "string", pattern: "ECACredential" },
+            filter: { type: "object", pattern: "ECACredential" },
           },
         ],
       },
@@ -22,14 +32,17 @@ const PRESENTATION_DEFINITION = {
   ],
 };
 
-const VP_FORMAT = {
-  ldp_vp: {
-    proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"],
+const CLIENT_METADATA = {
+  client_name: "https://breja.me",
+  vp_formats: {
+    ldp_vp: {
+      proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"],
+    },
   },
 };
 
 function generateNonce(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  return btoa(Date.now().toString());
 }
 
 type QrData = {
@@ -53,9 +66,16 @@ function buildDeepLinkUrl(data: QrData): string {
   }
 
   const params = new URLSearchParams();
-  params.set("origin", CLIENT_ID);
+  params.set("origin", ORIGIN);
   params.set("requestId", data.requestId);
+  params.set("client_id", CLIENT_ID);
+  params.set("state", data.requestId);
+  params.set("response_type", "vp_token");
+  params.set("response_mode", "direct_post");
   params.set("nonce", data.authorizationDetails.nonce);
+  params.set("response_uri", `${BASE_URL}/v1/verify/vp-submission/direct-post`);
+  params.set("presentation_definition", JSON.stringify(PRESENTATION_DEFINITION));
+  params.set("client_metadata", JSON.stringify(CLIENT_METADATA));
 
   return `openid4vp://authorize?${params.toString()}`;
 }
@@ -131,7 +151,6 @@ export async function openWalletForVerification(): Promise<{
   requestId: string;
 }> {
   const { transactionId, requestId, deepLinkUrl } = await createVPRequest();
-  
   try {
     await Linking.openURL(deepLinkUrl);
   } catch (error) {
