@@ -1,7 +1,8 @@
 import { Linking } from "react-native";
 
-const BASE_URL = "https://verify.breja.me";
-const CLIENT_ID = "brejame://";
+const BASE_URL = "https://injiverify.credenciaisverificaveis-dev.dataprev.gov.br";
+const CLIENT_ID = "https://injiverify.credenciaisverificaveis-dev.dataprev.gov.br";
+const ORIGIN = "brejame://";
 
 const PRESENTATION_DEFINITION = {
   id: "eca-age-check",
@@ -22,15 +23,6 @@ const PRESENTATION_DEFINITION = {
   ],
 };
 
-const VP_FORMAT = {
-  ldp_vp: {
-    proof_type: ["Ed25519Signature2018", "Ed25519Signature2020", "RsaSignature2018"],
-  },
-};
-
-function generateNonce(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-}
 
 type QrData = {
   transactionId: string;
@@ -40,22 +32,34 @@ type QrData = {
     responseMode: string;
     nonce: string;
     responseUri: string;
-    presentationDefinitionUri?: string;
     presentationDefinition?: object;
+    clientId?: string;
+    acceptVPWithoutHolderProof?: boolean;
+    issuedAt?: number;
   };
   requestUri?: string;
   expiresAt?: number;
 };
 
 function buildDeepLinkUrl(data: QrData): string {
-  if (!data.authorizationDetails) {
-    throw new Error("Missing authorization details");
+  const params = new URLSearchParams();
+  params.set("client_id", CLIENT_ID);
+
+  if (data.requestUri) {
+    params.set("request_uri", data.requestUri);
+  } else if (data.authorizationDetails) {
+    const auth = data.authorizationDetails as any;
+    params.set("redirect_uri", auth.responseUri || `${BASE_URL}/v1/verify/vp-submission/direct-post`);
+    params.set("response_type", auth.responseType || "vp_token");
+    params.set("response_mode", auth.responseMode || "direct_post");
+    params.set("nonce", auth.nonce || "");
+    params.set("state", data.requestId);
+    params.set("presentation_definition", JSON.stringify(auth.presentationDefinition || PRESENTATION_DEFINITION));
+  } else {
+    throw new Error("Missing requestUri and authorizationDetails in VP request response");
   }
 
-  const params = new URLSearchParams();
-  params.set("origin", CLIENT_ID);
-  params.set("requestId", data.requestId);
-  params.set("nonce", data.authorizationDetails.nonce);
+  if (data.requestId) params.set("origin", ORIGIN);
 
   return `openid4vp://authorize?${params.toString()}`;
 }
@@ -79,6 +83,7 @@ export async function createVPRequest(): Promise<{
   }
 
   const data: QrData = await response.json();
+  console.log('[createVPRequest] response:', JSON.stringify(data));
   const deepLinkUrl = buildDeepLinkUrl(data);
 
   return {
@@ -94,10 +99,12 @@ export async function pollVPStatus(
   const response = await fetch(
     `${BASE_URL}/v1/verify/vp-request/${requestId}/status`
   );
+  const raw = await response.text();
+  console.log('[pollVPStatus] status:', response.status, 'body:', raw);
   if (!response.ok) {
-    throw new Error("Failed to fetch VP status");
+    throw new Error(`Failed to fetch VP status: ${response.status} ${raw}`);
   }
-  const data = await response.json();
+  const data = JSON.parse(raw);
   return data.status;
 }
 
@@ -109,19 +116,30 @@ export async function getVPResult(
   );
 
   const rawText = await response.text();
+  console.log('[getVPResult] status:', response.status, 'body:', rawText);
 
   if (!response.ok) {
-    throw new Error("Failed to get VP result");
+    throw new Error(`Failed to get VP result: ${response.status} ${rawText}`);
   }
 
   const data = JSON.parse(rawText);
+  console.log('[getVPResult] parsed data:', JSON.stringify(data));
 
   if (data.vpResultStatus !== "SUCCESS" || !data.vcResults?.length) {
-    throw new Error("VP result unavailable");
+    throw new Error(`VP result unavailable: status=${data.vpResultStatus}, vcResults=${JSON.stringify(data.vcResults)}`);
   }
 
-  const vc = JSON.parse(data.vcResults[0].vc);
-  const isOver18 = vc.credential.credentialSubject.isOver18 === true;
+  const vcRaw = data.vcResults[0].vc;
+  console.log('[getVPResult] vcRaw:', vcRaw);
+  const vc = typeof vcRaw === 'string' ? JSON.parse(vcRaw) : vcRaw;
+  console.log('[getVPResult] vc parsed:', JSON.stringify(vc));
+
+  // Try multiple paths for isOver18
+  const subject = vc?.credential?.credentialSubject
+    ?? vc?.credentialSubject
+    ?? vc;
+  console.log('[getVPResult] credentialSubject:', JSON.stringify(subject));
+  const isOver18 = subject?.isOver18 === true;
 
   return { verified: isOver18, underage: !isOver18 };
 }
@@ -131,7 +149,7 @@ export async function openWalletForVerification(): Promise<{
   requestId: string;
 }> {
   const { transactionId, requestId, deepLinkUrl } = await createVPRequest();
-  
+  console.log("Deep link URL:", deepLinkUrl);
   try {
     await Linking.openURL(deepLinkUrl);
   } catch (error) {

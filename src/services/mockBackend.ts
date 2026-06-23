@@ -1,4 +1,4 @@
-const BASE_URL = 'https://verify.breja.me';
+const BASE_URL = 'https://injiverify.credenciaisverificaveis-dev.dataprev.gov.br';
 
 const PRESENTATION_DEFINITION = {
   id: 'eca-age-check',
@@ -28,7 +28,15 @@ export async function createVPRequest(): Promise<VPRequestResult> {
     body: JSON.stringify({ clientId: 'brejame://', presentationDefinition: PRESENTATION_DEFINITION }),
   });
   if (!res.ok) throw new Error(`VP request creation failed: ${res.status}`);
-  const { requestId, transactionId, authorizationDetails } = await res.json();
+  const raw = await res.json();
+  console.log('[createVPRequest] response:', JSON.stringify(raw));
+  const { requestId, transactionId, authorizationDetails } = raw;
+  if (!authorizationDetails) throw new Error(`missing authorization details — raw: ${JSON.stringify(raw)}`);
+
+  console.log('[createVPRequest] requestId:', requestId);
+  console.log('[createVPRequest] transactionId:', transactionId);
+  console.log('[createVPRequest] authorizationDetails:', JSON.stringify(authorizationDetails));
+
   return {
     requestId,
     transactionId,
