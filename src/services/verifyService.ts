@@ -5,17 +5,26 @@ const CLIENT_ID = "https://injiverify.credenciaisverificaveis-dev.dataprev.gov.b
 const ORIGIN = "brejame://";
 
 const PRESENTATION_DEFINITION = {
-  id: "eca-age-check",
+  id: "eca-age-verification",
+  purpose: "Verificação de idade conforme o Estatuto da Criança e do Adolescente",
+  format: {
+    ldp_vc: {
+      proof_type: ["Ed25519Signature2020"],
+    },
+  },
   input_descriptors: [
     {
-      id: "ECACredential",
-      name: "Comprovante de Maioridade",
-      purpose: "Verificar que o usuário é maior de 18 anos",
+      id: "eca credential",
+      format: {
+        ldp_vc: {
+          proof_type: ["Ed25519Signature2020"],
+        },
+      },
       constraints: {
         fields: [
           {
             path: ["$.type"],
-            filter: { type: "string", pattern: "ECACredential" },
+            filter: { type: "object", pattern: "ECACredential" },
           },
         ],
       },
