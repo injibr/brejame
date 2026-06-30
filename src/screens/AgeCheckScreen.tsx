@@ -28,14 +28,20 @@ export default function AgeCheckScreen({ navigation }: Props) {
         const vpStatus = await pollVPStatus(requestId);
 
         if (vpStatus === "VP_SUBMITTED") {
-          setStatus("Verificando credencial…");
-          const result = await getVPResult(transactionId);
           pollingRef.current = false;
-
-          if (result.verified) {
-            navigation.replace("Success", { requestId });
-          } else if (result.underage) {
-            navigation.replace("Underage");
+          setStatus("Verificando credencial…");
+          try {
+            const result = await getVPResult(transactionId);
+            if (result.verified) {
+              navigation.replace("Success", { requestId });
+            } else if (result.underage) {
+              navigation.replace("Underage");
+            }
+          } catch (resultErr: any) {
+            console.error('[AgeCheck] getVPResult failed:', resultErr);
+            setError(`Erro ao obter resultado: ${resultErr?.message}`);
+            setLoading(false);
+            setStatus(null);
           }
           return;
         }
@@ -61,7 +67,10 @@ export default function AgeCheckScreen({ navigation }: Props) {
   // When app comes back to foreground, resume polling
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active" && sessionRef.current && !pollingRef.current) {
+      if (nextState === "active" && sessionRef.current) {
+        pollingRef.current = false;
+        setError(null);
+        setLoading(true);
         startPolling(sessionRef.current.requestId, sessionRef.current.transactionId);
       }
     });
