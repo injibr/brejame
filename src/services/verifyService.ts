@@ -1,7 +1,7 @@
 import { Linking } from "react-native";
 
 const BASE_URL = "https://injiverify.credenciaisverificaveis-dev.dataprev.gov.br";
-const CLIENT_ID = "https://injiverify.credenciaisverificaveis-dev.dataprev.gov.br";
+const CLIENT_ID = "did:web:injiverify.credenciaisverificaveis-dev.dataprev.gov.br:v1:verify";
 const ORIGIN = "brejame://";
 
 const PRESENTATION_DEFINITION = {
