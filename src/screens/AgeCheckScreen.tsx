@@ -1,103 +1,22 @@
-import { useState, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, AppState } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/AppNavigator";
-import {
-  openWalletForVerification,
-  pollVPStatus,
-  getVPResult,
-} from "../services/verifyService";
+import { useAgeVerification } from "../hooks/useAgeVerification";
+import { LoadingOverlay } from "../components/LoadingOverlay";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AgeCheck">;
 
 export default function AgeCheckScreen({ navigation }: Props) {
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const sessionRef = useRef<{ requestId: string; transactionId: string } | null>(null);
-  const pollingRef = useRef(false);
-
-  async function startPolling(requestId: string, transactionId: string) {
-    if (pollingRef.current) return;
-    pollingRef.current = true;
-    setStatus("Aguardando resposta do wallet…");
-
-    try {
-      while (pollingRef.current) {
-        const vpStatus = await pollVPStatus(requestId);
-
-        if (vpStatus === "VP_SUBMITTED") {
-          pollingRef.current = false;
-          setStatus("Verificando credencial…");
-          try {
-            const result = await getVPResult(transactionId);
-            if (result.verified) {
-              navigation.replace("Success", { requestId });
-            } else if (result.underage) {
-              navigation.replace("Underage");
-            }
-          } catch (resultErr: any) {
-            console.error('[AgeCheck] getVPResult failed:', resultErr);
-            setError(`Erro ao obter resultado: ${resultErr?.message}`);
-            setLoading(false);
-            setStatus(null);
-          }
-          return;
-        }
-
-        if (vpStatus === "EXPIRED") {
-          pollingRef.current = false;
-          setError("Sessão expirada. Tente novamente.");
-          setLoading(false);
-          setStatus(null);
-          return;
-        }
-
-        // status === "ACTIVE" — continue polling
-      }
-    } catch (err) {
-      pollingRef.current = false;
-      setError("Erro ao verificar status. Tente novamente.");
-      setLoading(false);
-      setStatus(null);
-    }
-  }
-
-  // When app comes back to foreground, resume polling
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active" && sessionRef.current) {
-        pollingRef.current = false;
-        setError(null);
-        setLoading(true);
-        startPolling(sessionRef.current.requestId, sessionRef.current.transactionId);
-      }
-    });
-    return () => {
-      subscription.remove();
-      pollingRef.current = false;
-    };
-  }, []);
-
-  async function handleVerify() {
-    setLoading(true);
-    setError(null);
-    setStatus("Abrindo wallet…");
-
-    try {
-      const { transactionId, requestId } = await openWalletForVerification();
-      sessionRef.current = { requestId, transactionId };
-      startPolling(requestId, transactionId);
-    } catch (e: any) {
-      setError(e.message || "Erro ao conectar com o wallet.");
-      setLoading(false);
-      setStatus(null);
-    }
-  };
+  const { loading, status, error, handleVerify, onBack } = useAgeVerification({
+    onSuccess: (requestId) => navigation.replace("Success", { requestId }),
+    onUnderage: () => navigation.replace("Underage"),
+    onBack: () => navigation.goBack(),
+  });
 
   return (
     <SafeAreaView style={styles.safe}>
+      <LoadingOverlay visible={loading} />
       <View style={styles.container}>
         <View style={styles.iconBox}>
           <Text style={styles.icon}>🍺</Text>
@@ -111,9 +30,7 @@ export default function AgeCheckScreen({ navigation }: Props) {
           A verificação é feita via credencial digital (Inji Wallet).
         </Text>
 
-        {status && (
-          <Text style={styles.statusText}>{status}</Text>
-        )}
+        {status && <Text style={styles.statusText}>{status}</Text>}
 
         {error && (
           <View style={styles.errorBox}>
@@ -129,7 +46,7 @@ export default function AgeCheckScreen({ navigation }: Props) {
           <Text style={styles.buttonText}>Verificar Idade</Text>
         </Pressable>
 
-        <Pressable onPress={() => { pollingRef.current = false; navigation.goBack(); }} style={styles.backLink}>
+        <Pressable onPress={onBack} style={styles.backLink}>
           <Text style={styles.backText}>← Voltar</Text>
         </Pressable>
       </View>
@@ -146,57 +63,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 1, shadowRadius: 0, elevation: 8, marginBottom: 24,
   },
   icon: { fontSize: 48 },
-  title: {
-    fontSize: 32,
-    fontWeight: "900",
-    color: "#1A1A1A",
-    textAlign: "center",
-  },
+  title: { fontSize: 32, fontWeight: "900", color: "#1A1A1A", textAlign: "center" },
   body: {
-    fontSize: 18,
-    color: "#333",
-    textAlign: "center",
-    marginTop: 20,
-    lineHeight: 26,
-    paddingHorizontal: 8,
+    fontSize: 18, color: "#333", textAlign: "center",
+    marginTop: 20, lineHeight: 26, paddingHorizontal: 8,
   },
-  note: {
-    fontSize: 13,
-    color: "#999",
-    textAlign: "center",
-    marginTop: 12,
-    fontStyle: "italic",
-  },
-  statusText: {
-    fontSize: 14,
-    color: "#FF5A1F",
-    textAlign: "center",
-    marginTop: 16,
-    fontWeight: "600",
-  },
+  note: { fontSize: 13, color: "#999", textAlign: "center", marginTop: 12, fontStyle: "italic" },
+  statusText: { fontSize: 14, color: "#FF5A1F", textAlign: "center", marginTop: 16, fontWeight: "600" },
   errorBox: {
-    marginTop: 20,
-    backgroundColor: "#DC2626",
-    borderWidth: 3,
-    borderColor: "#000",
-    padding: 12,
-    width: "100%",
-    shadowColor: "#000",
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 6,
+    marginTop: 20, backgroundColor: "#DC2626", borderWidth: 3, borderColor: "#000",
+    padding: 12, width: "100%",
+    shadowColor: "#000", shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, shadowRadius: 0, elevation: 6,
   },
-  errorText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "700",
-    textAlign: "center",
-  },
+  errorText: { color: "#FFF", fontSize: 16, fontWeight: "700", textAlign: "center" },
   button: {
     marginTop: 40, backgroundColor: "#FF5A1F", paddingVertical: 18, paddingHorizontal: 48,
-    borderWidth: 3, borderColor: "#000", shadowColor: "#000",
-    shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 8,
+    borderWidth: 3, borderColor: "#000",
+    shadowColor: "#000", shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 8,
   },
   buttonPressed: { shadowOffset: { width: 1, height: 1 }, transform: [{ translateX: 3 }, { translateY: 3 }] },
   buttonText: { fontSize: 22, fontWeight: "900", color: "#FFF", letterSpacing: 1 },
