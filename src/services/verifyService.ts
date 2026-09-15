@@ -36,17 +36,7 @@ const PRESENTATION_DEFINITION = {
 type QrData = {
   transactionId: string;
   requestId: string;
-  authorizationDetails?: {
-    responseType: string;
-    responseMode: string;
-    nonce: string;
-    responseUri: string;
-    presentationDefinition?: object;
-    clientId?: string;
-    acceptVPWithoutHolderProof?: boolean;
-    issuedAt?: number;
-  };
-  requestUri?: string;
+  requestUri: string;
   expiresAt?: number;
 };
 
@@ -54,19 +44,8 @@ function buildDeepLinkUrl(data: QrData): string {
   const params = new URLSearchParams();
   params.set("client_id", CLIENT_ID);
 
-  if (data.requestUri) {
-    params.set("request_uri", data.requestUri);
-  } else if (data.authorizationDetails) {
-    const auth = data.authorizationDetails as any;
-    params.set("redirect_uri", auth.responseUri || `${BASE_URL}/v1/verify/vp-submission/direct-post`);
-    params.set("response_type", auth.responseType || "vp_token");
-    params.set("response_mode", auth.responseMode || "direct_post");
-    params.set("nonce", auth.nonce || "");
-    params.set("state", data.requestId);
-    params.set("presentation_definition", JSON.stringify(auth.presentationDefinition || PRESENTATION_DEFINITION));
-  } else {
-    throw new Error("Missing requestUri and authorizationDetails in VP request response");
-  }
+  if (!data.requestUri) throw new Error("Missing requestUri in VP request response");
+  params.set("request_uri", data.requestUri);
 
   if (data.requestId) params.set("origin", ORIGIN);
 
