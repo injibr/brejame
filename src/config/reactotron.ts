@@ -1,10 +1,7 @@
-import Reactotron from 'reactotron-react-native';
+import Reactotron from "reactotron-react-native";
 
-const reactotron = Reactotron
-  .configure({
-    name: 'Breja.me',
-  })
-  .useReactNative()
-  .connect();
+if (__DEV__) {
+  Reactotron.configure({ name: "Breja.me" }).useReactNative().connect();
+}
 
-export default reactotron;
+export default Reactotron;

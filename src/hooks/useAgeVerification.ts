@@ -1,55 +1,115 @@
-import { useState, useCallback } from "react";
-import { Alert } from "react-native";
-import * as Linking from "expo-linking";
-import { createVPRequest, pollAndFetchResult } from "../services/mockBackend";
-import { useDeepLinking } from "./useDeepLinking";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { AppState } from "react-native";
+import { openWalletForVerification, pollVPStatus, getVPResult } from "../services/verifyService";
 
-type VerificationResult = {
-  requestId: string;
-  isOver18: boolean;
-} | { underage: true };
+type Session = { requestId: string; transactionId: string };
 
-export function useAgeVerification() {
-  const [waiting, setWaiting] = useState(false);
-  const { setupListener, removeListener } = useDeepLinking();
+type VerificationState = {
+  loading: boolean;
+  status: string | null;
+  error: string | null;
+};
 
-  const handleCancellation = useCallback(() => {
-    removeListener();
-    setWaiting(false);
-  }, [removeListener]);
+type VerificationActions = {
+  handleVerify: () => Promise<void>;
+  onBack: () => void;
+};
 
-  const verify = useCallback(async (): Promise<VerificationResult | null> => {
-    setWaiting(true);
+type Callbacks = {
+  onSuccess: (requestId: string) => void;
+  onUnderage: () => void;
+  onBack: () => void;
+};
+
+export function useAgeVerification({ onSuccess, onUnderage, onBack }: Callbacks): VerificationState & VerificationActions {
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const sessionRef = useRef<Session | null>(null);
+  const pollingRef = useRef(false);
+
+  const startPolling = useCallback(async (requestId: string, transactionId: string) => {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    setStatus("Aguardando resposta do wallet…");
+
     try {
-      const { requestId, transactionId, nonce } = await createVPRequest();
+      while (pollingRef.current) {
+        const vpStatus = await pollVPStatus(requestId);
 
-      setupListener((url) => {
-        if (Linking.parse(url).queryParams?.verified === "false") {
-          handleCancellation();
+        if (vpStatus === "VP_SUBMITTED") {
+          pollingRef.current = false;
+          setStatus("Verificando credencial…");
+          try {
+            const result = await getVPResult(transactionId);
+            if (result.verified) {
+              onSuccess(requestId);
+            } else if (result.underage) {
+              onUnderage();
+            }
+          } catch (resultErr: any) {
+            console.error("[useAgeVerification] getVPResult failed:", resultErr);
+            setError(`Erro ao obter resultado: ${resultErr?.message}`);
+            setLoading(false);
+            setStatus(null);
+          }
+          return;
         }
-      });
 
-      const walletUrl = `openid4vp://authorize?origin=brejame%3A%2F%2F&requestId=${requestId}&nonce=${nonce}`;
-      await Linking.openURL(walletUrl);
+        if (vpStatus === "EXPIRED") {
+          pollingRef.current = false;
+          setError("Sessão expirada. Tente novamente.");
+          setLoading(false);
+          setStatus(null);
+          return;
+        }
 
-      const result = await pollAndFetchResult(requestId, transactionId);
-      removeListener();
-
-      if (!result) {
-        setWaiting(false);
-        Alert.alert('Verificação expirada', 'Tente novamente.');
-        return null;
+        // status === "ACTIVE" — continue polling
       }
-
-      return result.isOver18 
-        ? { requestId, isOver18: true }
-        : { underage: true };
-    } catch (e) {
-      setWaiting(false);
-      Alert.alert('Erro', e instanceof Error ? e.message : 'Não foi possível iniciar a verificação.');
-      return null;
+    } catch {
+      pollingRef.current = false;
+      setError("Erro ao verificar status. Tente novamente.");
+      setLoading(false);
+      setStatus(null);
     }
-  }, [setupListener, removeListener, handleCancellation]);
+  }, [onSuccess, onUnderage]);
 
-  return { verify, waiting };
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && sessionRef.current) {
+        pollingRef.current = false;
+        setError(null);
+        setLoading(true);
+        startPolling(sessionRef.current.requestId, sessionRef.current.transactionId);
+      }
+    });
+    return () => {
+      subscription.remove();
+      pollingRef.current = false;
+    };
+  }, [startPolling]);
+
+  const handleVerify = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setStatus("Abrindo wallet…");
+
+    try {
+      const { transactionId, requestId } = await openWalletForVerification();
+      sessionRef.current = { requestId, transactionId };
+      startPolling(requestId, transactionId);
+    } catch (e: any) {
+      setError(e.message || "Erro ao conectar com o wallet.");
+      setLoading(false);
+      setStatus(null);
+    }
+  }, [startPolling]);
+
+  const handleBack = useCallback(() => {
+    pollingRef.current = false;
+    onBack();
+  }, [onBack]);
+
+  return { loading, status, error, handleVerify, onBack: handleBack };
 }
